@@ -12,6 +12,13 @@ import (
 	"time"
 )
 
+// 版本資訊變數（在建構時由 ldflags 設定）
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+)
+
 type Config struct {
 	PreventSleepInterval int `json:"preventSleepInterval"`
 }
@@ -79,7 +86,16 @@ func main() {
 	statusFlag := flag.Bool("status", false, "查詢程式運行狀態")
 	killFlag := flag.String("kill", "", "終止指定工作緒 (使用 -kill preventSleep1)")
 	intervalFlag := flag.Int("interval", 0, "設定防休眠間隔時間 (單位：秒)")
+	versionFlag := flag.Bool("version", false, "顯示版本資訊")
 	flag.Parse()
+
+	// 處理版本資訊顯示
+	if *versionFlag {
+		fmt.Printf("Don't Sleep %s\n", Version)
+		fmt.Printf("建構時間: %s\n", BuildTime)
+		fmt.Printf("Git Commit: %s\n", GitCommit)
+		return
+	}
 
 	startTime = time.Now()
 	config := loadConfig()
