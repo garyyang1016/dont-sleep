@@ -1,0 +1,106 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+  actions: read
+  id-token: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Get dependencies
+      run: go mod tidy
+      
+    - name: Build for Windows amd64
+      run: |
+        $env:GOOS="windows"
+        $env:GOARCH="amd64"
+        go build -ldflags "-s -w" -o dont-sleep-windows-amd64.exe main.go
+        
+    - name: Build for Windows arm64
+      run: |
+        $env:GOOS="windows"
+        $env:GOARCH="arm64"
+        go build -ldflags "-s -w" -o dont-sleep-windows-arm64.exe main.go
+        
+    - name: Create checksums
+      run: |
+        $files = @("dont-sleep-windows-amd64.exe", "dont-sleep-windows-arm64.exe")
+        foreach ($file in $files) {
+          $hash = Get-FileHash -Algorithm SHA256 $file
+          "$($hash.Hash.ToLower())  $file" | Out-File -FilePath "checksums.txt" -Append -Encoding utf8
+        }
+        
+    - name: Create release notes
+      run: |
+        @"
+        ## Don't Sleep v${{ github.event.inputs.tag || github.ref_name }} - Windows 防休眠工具
+
+        ### 🎉 新功能
+        - 防止 Windows 系統休眠和螢幕保護程式
+        - 支援自訂防休眠間隔時間
+        - 命令列介面控制
+        - JSON 設定檔管理
+        - 優雅關閉支援
+
+        ### 📦 下載檔案
+        - **dont-sleep-windows-amd64.exe**: Windows x64 版本
+        - **dont-sleep-windows-arm64.exe**: Windows ARM64 版本
+
+        ### 🚀 使用方法
+        ```powershell
+        # 下載對應您系統架構的執行檔
+        # 執行程式
+        .\dont-sleep-windows-amd64.exe
+
+        # 或自訂間隔時間（秒）
+        .\dont-sleep-windows-amd64.exe -interval 600
+        ```
+
+        ### 📋 系統需求
+        - Windows 10/11 或 Windows Server 2016+
+        - x64 或 ARM64 處理器
+
+        ### 🔒 安全性
+        所有執行檔都包含 SHA256 校驗和，請在使用前驗證檔案完整性。
+
+        ---
+        完整說明請參考 [README.md](https://github.com/garyyang1016/dont-sleep/blob/main/README.md)
+        "@  | Out-File -FilePath "release_notes.md" -Encoding utf8
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+        name: "Don't Sleep ${{ github.event.inputs.tag || github.ref_name }}"
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        files: |
+          dont-sleep-windows-amd64.exe
+          dont-sleep-windows-arm64.exe
+          checksums.txt
+        token: ${{ secrets.GITHUB_TOKEN }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
