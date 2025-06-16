@@ -1,0 +1,39 @@
+# 編譯後的執行檔
+*.exe
+
+# Go 編譯快取
+*.so
+*.dylib
+
+# Go 模組快取（本地開發用）
+go.sum
+
+# 測試覆蓋率檔案
+*.out
+coverage.txt
+
+# Go 工作區檔案
+go.work
+go.work.sum
+
+# 編輯器檔案
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 作業系統檔案
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 日誌檔案
+*.log
+
+# 設定檔（如果包含敏感資訊）
+# config.json
