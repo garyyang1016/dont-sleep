@@ -93,6 +93,3 @@ jobs:
           dist/checksums.txt
         draft: false
         prerelease: false
-      env:
-        # 【修改】使用官方內建 Token，最穩最安全
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
