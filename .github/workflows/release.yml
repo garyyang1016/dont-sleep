@@ -11,12 +11,10 @@ on:
         required: true
         default: 'v1.0.0'
 
-permissions:
-  contents: write
-
 jobs:
   build:
-    runs-on: windows-latest
+    # 1. 修改為 self-hosted
+    runs-on: self-hosted
     
     steps:
     - name: Checkout code
@@ -30,60 +28,56 @@ jobs:
         
     - name: Get version
       id: version
+      # 2. 修改為 bash 語法
       run: |
-        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-          $VERSION = "${{ github.event.inputs.version }}"
-        } else {
-          $VERSION = "${{ github.ref_name }}"
-        }
-        echo "version=$VERSION" >> $env:GITHUB_OUTPUT
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Version: $VERSION"
-      shell: powershell
       
     - name: Build application
+      # 3. 將 PowerShell 指令改為 Bash/Linux 指令
       run: |
-        $VERSION = "${{ steps.version.outputs.version }}"
-        $BUILD_TIME = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $GIT_COMMIT = "${{ github.sha }}".Substring(0, 7)
+        VERSION="${{ steps.version.outputs.version }}"
+        BUILD_TIME=$(date +"%Y-%m-%d %H:%M:%S")
+        GIT_COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
         
         # 建立輸出目錄
-        New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+        mkdir -p dist
         
-        # 設定建構參數
-        $LDFLAGS = "-X main.Version=$VERSION -X 'main.BuildTime=$BUILD_TIME' -X main.GitCommit=$GIT_COMMIT -s -w"
+        # 設定建構參數 (Go 的跨平台編譯能力很強，在 Linux 也能編譯 Windows 執行檔)
+        LDFLAGS="-X main.Version=$VERSION -X 'main.BuildTime=$BUILD_TIME' -X main.GitCommit=$GIT_COMMIT -s -w"
         
         # 建構 Windows 64 位元版本
-        $env:GOOS = "windows"
-        $env:GOARCH = "amd64"
-        $env:CGO_ENABLED = "0"
-        go build -ldflags $LDFLAGS -o "dist\dont-sleep-windows-amd64.exe" main.go
+        GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "dist/dont-sleep-windows-amd64.exe" main.go
         
         # 建構 Windows 32 位元版本
-        $env:GOARCH = "386"
-        go build -ldflags $LDFLAGS -o "dist\dont-sleep-windows-386.exe" main.go
+        GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "dist/dont-sleep-windows-386.exe" main.go
         
         # 複製必要檔案
-        Copy-Item "config.json" "dist\" -Force
-        Copy-Item "README.md" "dist\" -Force
+        cp config.json README.md dist/
         
-        # 建立壓縮檔
-        Compress-Archive -Path "dist\*" -DestinationPath "dist\dont-sleep-$VERSION-windows.zip"
+        # 建立壓縮檔 (請確保伺服器有安裝 zip)
+        # 注意：Linux 下使用 zip，語法略有不同
+        cd dist
+        zip -r "dont-sleep-$VERSION-windows.zip" ./*
+        cd ..
         
         # 顯示建構結果
-        Get-ChildItem dist
-      shell: powershell
+        ls -R dist
       
     - name: Create checksums
       run: |
         cd dist
-        Get-ChildItem *.exe | ForEach-Object {
-          $hash = Get-FileHash $_.Name -Algorithm SHA256
-          "$($hash.Hash.ToLower())  $($_.Name)" | Out-File -Append -Encoding utf8 "checksums.txt"
-        }
-        Get-Content "checksums.txt"
-      shell: powershell
-        - name: Create Release
-      uses: softprops/action-gh-release@v2
+        # 使用 Linux 的 sha256sum 工具
+        sha256sum *.exe > checksums.txt
+        cat checksums.txt
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
       with:
         tag_name: ${{ steps.version.outputs.version }}
@@ -99,13 +93,9 @@ jobs:
           ### 使用方法
           1. 下載對應您系統的執行檔
           2. 在命令列中執行：`dont-sleep.exe`
-          3. 使用 `dont-sleep.exe -h` 查看所有可用選項
           
           ### 檔案校驗
           請使用 `checksums.txt` 檔案驗證下載檔案的完整性。
-          
-          ### 變更內容
-          - 請參考 commit 記錄了解詳細變更
         files: |
           dist/dont-sleep-windows-amd64.exe
           dist/dont-sleep-windows-386.exe
@@ -113,3 +103,5 @@ jobs:
           dist/checksums.txt
         draft: false
         prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
