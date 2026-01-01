@@ -11,9 +11,12 @@ on:
         required: true
         default: 'v1.0.0'
 
+# 【重要】新增這段，給予 Action 上傳 Release 的權限
+permissions:
+  contents: write
+
 jobs:
   build:
-    # 1. 修改為 self-hosted
     runs-on: self-hosted
     
     steps:
@@ -28,7 +31,6 @@ jobs:
         
     - name: Get version
       id: version
-      # 2. 修改為 bash 語法
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           VERSION="${{ github.event.inputs.version }}"
@@ -39,40 +41,32 @@ jobs:
         echo "Version: $VERSION"
       
     - name: Build application
-      # 3. 將 PowerShell 指令改為 Bash/Linux 指令
       run: |
         VERSION="${{ steps.version.outputs.version }}"
         BUILD_TIME=$(date +"%Y-%m-%d %H:%M:%S")
-        GIT_COMMIT=$(echo "${{ github.sha }}" | cut -c1-7)
+        # 修正：git log 取得 commit hash 的更安全寫法
+        GIT_COMMIT=$(git rev-parse --short HEAD)
         
-        # 建立輸出目錄
         mkdir -p dist
         
-        # 設定建構參數 (Go 的跨平台編譯能力很強，在 Linux 也能編譯 Windows 執行檔)
         LDFLAGS="-X main.Version=$VERSION -X 'main.BuildTime=$BUILD_TIME' -X main.GitCommit=$GIT_COMMIT -s -w"
         
-        # 建構 Windows 64 位元版本
+        echo "Building specific Windows versions..."
         GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "dist/dont-sleep-windows-amd64.exe" main.go
-        
-        # 建構 Windows 32 位元版本
         GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "dist/dont-sleep-windows-386.exe" main.go
         
-        # 複製必要檔案
         cp config.json README.md dist/
         
-        # 建立壓縮檔 (請確保伺服器有安裝 zip)
-        # 注意：Linux 下使用 zip，語法略有不同
         cd dist
+        # 這裡需要 Runner 安裝 zip (sudo apt-get install zip)
         zip -r "dont-sleep-$VERSION-windows.zip" ./*
         cd ..
         
-        # 顯示建構結果
         ls -R dist
       
     - name: Create checksums
       run: |
         cd dist
-        # 使用 Linux 的 sha256sum 工具
         sha256sum *.exe > checksums.txt
         cat checksums.txt
       
@@ -90,10 +84,6 @@ jobs:
           - **Windows 32 位元**: `dont-sleep-windows-386.exe`
           - **完整套件**: `dont-sleep-${{ steps.version.outputs.version }}-windows.zip`
           
-          ### 使用方法
-          1. 下載對應您系統的執行檔
-          2. 在命令列中執行：`dont-sleep.exe`
-          
           ### 檔案校驗
           請使用 `checksums.txt` 檔案驗證下載檔案的完整性。
         files: |
@@ -104,4 +94,5 @@ jobs:
         draft: false
         prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GACTIONS }}
+        # 【修改】使用官方內建 Token，最穩最安全
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
